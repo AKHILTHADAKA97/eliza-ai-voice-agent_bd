@@ -5,8 +5,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_name: str = "ELIZA AI"
     environment: str = "Production"
-    host: str = "127.0.0.1"
-    port: int = 0.0.0.0
+    host: str = "0.0.0.0"
+    port: int = 8000
     frontend_origin: str = "https://elizaai-five.vercel.app/"
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
