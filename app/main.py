@@ -40,10 +40,10 @@ app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestSizeLimitMiddleware, max_size_bytes=1048576) # 1MB limit
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.configured_origins,
+    allow_origins=["https://eliza-ai-voice-agent-frontend.onrender.com", "https://*.onrender.com"] + settings.configured_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "X-Session-ID", "X-Request-ID", "Authorization"],
+    allow_headers=["*"],
 )
 
 router = ModelRouter()
