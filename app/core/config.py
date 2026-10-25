@@ -4,10 +4,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "ELIZA AI"
-    environment: str = "development"
+    environment: str = "Production"
     host: str = "127.0.0.1"
-    port: int = 8000
-    frontend_origin: str = "http://localhost:5173"
+    port: int = 0.0.0.0
+    frontend_origin: str = "https://elizaai-five.vercel.app/"
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
     openai_base_url: str = ""
@@ -44,7 +44,7 @@ class Settings(BaseSettings):
         origins = [self.frontend_origin.rstrip("/")]
         if self.environment == "development":
             # Allow local development origins only in development mode
-            for o in ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174", "http://127.0.0.1:5174"]:
+            for o in ["https://elizaai-five.vercel.app/"]:
                 if o not in origins:
                     origins.append(o)
         return origins
