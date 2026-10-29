@@ -48,7 +48,8 @@
 | 📅 **Calendar Date Range Filters** | Custom "From Date" to "To Date" calendar inputs on all admin tables with full-day timestamp coverage. |
 | ⚡ **Admin Unblocking & Bulk Actions** | One-click instant unblocking restoring 3 trial questions, plus single-row and multi-select bulk deletions. |
 | 📥 **One-Click CSV Export** | Instant client-side CSV downloads for customer registries, session history, and customer feedback. |
-| 🎨 **15 Solid & 5 Gradient Themes** | High-contrast neon accents (Violet, Emerald, Cobalt, Aurora, Cyberpunk) with persistent theme preferences. |
+| 🎨 **51 Themes (36 Gradients + 15 Solids)** | 36 Atmospheric Gradient Mixed Themes (Supernova, Cosmic, Oceanic, Synthwave, Cyberpunk, Aurora) & 15 Solids with random visitor color assignment and permanent user preference locking. |
+| 🗣️ **Curated Voice Library & 22 Indian Languages** | 8 ElevenLabs neural voice personas (ELIZA, ARJUN, NOVA, ALEX, KAVYA, VIKRAM, MARCUS, EMMA), 22 major Indian language locales, and independent microphone STT vs assistant TTS controls with browser fallback. |
 | 🛡️ **Zero Secret Leakage** | All private API keys, database credentials, and session keys are strictly isolated to the backend. Frontend bundle contains 0 secrets. |
 
 ---
