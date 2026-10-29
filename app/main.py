@@ -16,10 +16,15 @@ from app.core.security import (
     get_client_identifier,
     is_valid_uuid,
 )
-from app.schemas import ChatRequest, ChatResponse, SettingsIn, SettingsOut
+from app.schemas import ChatRequest, ChatResponse, SettingsIn, SettingsOut, TTSRequest
 from app.services.model_router import ModelRouter
 from app.services import conversations
 from app.services import prompt_guard
+from app.services.elevenlabs import (
+    VOICE_PROFILE_MAP,
+    is_elevenlabs_configured,
+    synthesize_speech,
+)
 from app.db import engine, Base, SessionLocal
 import app.models # Register all SQLAlchemy models
 from app.routes import access, questions, feedback, admin
@@ -103,8 +108,12 @@ _user_settings = {
     "default_model": _default_model_for(settings.default_provider),
     "auto_speak": True,
     "voice_name": "",
-    "voice_profile": "natural",
+    "voice_profile": "eliza",
+    "voice_lang": "en-IN",
+    "speech_recognition_lang": "en-IN",
+    "voice_engine": "auto",
     "speech_rate": 1.0,
+    "speech_pitch": 1.0,
     "response_style": "balanced",
     "custom_system_prompt": "",
     "theme": "green",
@@ -389,6 +398,60 @@ async def update_user_settings(body: SettingsIn, request: Request):
     resp["active_provider"] = active_prov
     resp["active_model"] = active_m
     return resp
+
+
+@app.get("/api/v1/audio/voices")
+async def get_voice_catalog(request: Request):
+    """Return voice profiles, supported Indian languages, and ElevenLabs configuration status."""
+    check_rate_limit(request, is_chat=False)
+    return {
+        "elevenlabs_configured": is_elevenlabs_configured(),
+        "profiles": list(VOICE_PROFILE_MAP.values()),
+        "default_profile": "eliza",
+    }
+
+
+@app.post("/api/v1/audio/tts")
+async def synthesize_text_to_speech(body: TTSRequest, request: Request):
+    """
+    Synthesize natural voice audio using ElevenLabs neural voices.
+    Falls back gracefully with fallback instructions if ElevenLabs is not configured or fails.
+    """
+    check_rate_limit(request, is_chat=False)
+    if not is_elevenlabs_configured():
+        return JSONResponse(
+            status_code=200,
+            content={
+                "available": False,
+                "reason": "elevenlabs_not_configured",
+                "message": "ElevenLabs API key not configured on backend. Use browser Web Speech API fallback.",
+            },
+        )
+
+    audio_bytes = await synthesize_speech(
+        text=body.text,
+        voice_id=body.voice_id,
+        voice_profile=body.voice_profile,
+    )
+
+    if not audio_bytes:
+        return JSONResponse(
+            status_code=200,
+            content={
+                "available": False,
+                "reason": "elevenlabs_synthesis_failed",
+                "message": "ElevenLabs synthesis failed or rate limited. Fallback to Web Speech API.",
+            },
+        )
+
+    return Response(
+        content=audio_bytes,
+        media_type="audio/mpeg",
+        headers={
+            "Cache-Control": "public, max-age=3600",
+            "Content-Disposition": 'inline; filename="speech.mp3"',
+        },
+    )
 
 
 if __name__ == "__main__":
