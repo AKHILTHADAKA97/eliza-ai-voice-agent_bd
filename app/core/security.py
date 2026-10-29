@@ -74,18 +74,6 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Permissions-Policy"] = "microphone=(self), camera=(), geolocation=()"
-        response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; "
-            "script-src 'self'; "
-            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-            "font-src 'self' data: https://fonts.gstatic.com; "
-            "connect-src 'self' http://127.0.0.1:* http://localhost:* "
-            "https://*.onrender.com "
-            "https://*.vercel.app "
-            "ws: wss:; "
-            "img-src 'self' data:; "
-            "frame-ancestors 'none';"
-        )
         # HSTS only over HTTPS in production
         if request.url.scheme == "https":
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
