@@ -344,3 +344,13 @@ async def update_user_settings(body: SettingsIn, request: Request):
     resp["active_provider"] = active_prov
     resp["active_model"] = active_m
     return resp
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        "app.main:app",
+        host=settings.host,
+        port=settings.port,
+        reload=(settings.environment.lower() == "development"),
+    )

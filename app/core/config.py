@@ -1,7 +1,22 @@
 import os
 import secrets
 from functools import lru_cache
+from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Ensure environment variables are loaded directly from .env
+load_dotenv()
+
+
+def _get_port_from_env() -> int:
+    """Import port strictly from .env / environment variable."""
+    env_port = os.getenv("PORT")
+    if env_port and env_port.strip():
+        try:
+            return int(env_port.strip())
+        except ValueError:
+            pass
+    return 8000
 
 
 def _default_session_secret_key() -> str:
@@ -18,7 +33,7 @@ class Settings(BaseSettings):
     app_name: str = "ELIZA AI"
     environment: str = "Production"
     host: str = "0.0.0.0"
-    port: int = 8000
+    port: int = _get_port_from_env()
     frontend_origin: str = "https://elizaaivoice.vercel.app"
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
