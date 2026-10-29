@@ -172,6 +172,28 @@ class AdminFeedbackUpdateRequest(BaseModel):
     admin_notes: Optional[str] = Field(default=None, max_length=2000)
 
 
+class BulkDeleteCustomersRequest(BaseModel):
+    customer_ids: List[str] = Field(min_length=1, max_length=1000)
+
+
+class BulkDeleteFeedbackRequest(BaseModel):
+    feedback_ids: List[str] = Field(min_length=1, max_length=1000)
+
+
+class BulkDeleteResponse(BaseModel):
+    success: bool = True
+    deleted_count: int
+    message: str
+
+
+class AdminCustomerUnblockResponse(BaseModel):
+    success: bool = True
+    message: str
+    customer_id: str
+    access_status: str = "eligible"
+    remaining_questions: int = 3
+
+
 # --- Aliases for Backward / Test Compatibility ---
 
 VerifyEmailIn = EmailVerifyRequest

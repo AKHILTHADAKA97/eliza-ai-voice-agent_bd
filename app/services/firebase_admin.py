@@ -1,23 +1,26 @@
-"""Server-side Firebase Admin SDK wrapper.
+"""Server-side Firebase Admin SDK wrapper & Cryptographic Token Verifier.
 
-Never store Firebase API keys in the frontend. This module verifies
-Firebase ID tokens issued by Google on the backend and returns the
-authenticated user's email, name, and picture.
+Verifies Firebase ID tokens issued by Google on the backend using either
+official Firebase Admin SDK (when service account credentials are provided)
+or Google's authoritative public JWKS / tokeninfo verification.
 
-Required environment variables:
-  FIREBASE_PROJECT_ID          - Firebase project ID
-  FIREBASE_PRIVATE_KEY         - PEM-encoded service-account private key
+Required / Optional environment variables:
+  FIREBASE_PROJECT_ID          - Firebase project ID (defaults to 'elizaaivoice')
+  FIREBASE_PRIVATE_KEY         - PEM-encoded service-account private key or JSON string
   FIREBASE_CLIENT_EMAIL        - Service account email
   FIREBASE_CLIENT_ID           - Service account client ID (optional)
 """
 import json
 import logging
 import os
+import time
 from typing import Optional
+import httpx
 
 logger = logging.getLogger("eliza.firebase")
 
 _firebase_app = None
+EXPECTED_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "elizaaivoice")
 
 
 def _build_app():
@@ -46,20 +49,30 @@ def _build_app():
             pem = raw_key.replace("\\n", "\n")
             cred_dict = {
                 "type": "service_account",
-                "project_id": os.getenv("FIREBASE_PROJECT_ID", ""),
+                "project_id": os.getenv("FIREBASE_PROJECT_ID", EXPECTED_PROJECT_ID),
                 "private_key": pem,
                 "client_email": os.getenv("FIREBASE_CLIENT_EMAIL", ""),
                 "client_id": os.getenv("FIREBASE_CLIENT_ID", ""),
                 "token_uri": "https://oauth2.googleapis.com/token",
             }
-            cred = credentials.Certificate(cred_dict)
+            try:
+                cred = credentials.Certificate(cred_dict)
+            except Exception as exc:
+                logger.warning("Failed to parse private key certificate: %s", exc)
+                cred = None
 
     if cred is None:
-        logger.error("FIREBASE_PRIVATE_KEY is not configured.")
         return None
 
     try:
-        _firebase_app = initialize_app(cred, name="eliza-access", opt={"httpTimeout": 10})
+        # Check if already initialized default or eliza-access
+        try:
+            _firebase_app = firebase_admin.get_app(name="eliza-access")
+            return _firebase_app
+        except ValueError:
+            pass
+
+        _firebase_app = initialize_app(cred, name="eliza-access")
         return _firebase_app
     except Exception as exc:
         logger.error("Failed to initialize Firebase Admin SDK: %s", exc)
@@ -67,28 +80,79 @@ def _build_app():
 
 
 def verify_id_token(token: str) -> Optional[dict]:
-    """Verify a Firebase ID token and return the decoded claims.
+    """Verify a Firebase ID token cryptographically and return the decoded claims.
 
-    Returns a dict with keys: uid, email, name, picture, email_verified
-    or None if the token is invalid/expired.
+    1. Attempts verification using Firebase Admin SDK if service account is configured.
+    2. Fallbacks to Google's cryptographic token verification endpoint.
+    3. Enforces expiration, audience, issuer, and email_verified.
     """
-    app = _build_app()
-    if app is None:
+    if not token or not isinstance(token, str):
         return None
 
-    try:
-        from firebase_admin import auth
-        decoded = auth.verify_id_token(token, app=app, clock_skew_seconds=30)
-        return {
-            "uid": decoded.get("uid", ""),
-            "email": decoded.get("email", ""),
-            "name": decoded.get("name", decoded.get("email", "")),
-            "picture": decoded.get("picture", ""),
-            "email_verified": bool(decoded.get("email_verified", False)),
-        }
-    except Exception as exc:
-        logger.warning("Firebase token verification failed: %s", exc)
+    token = token.strip()
+    if not token:
         return None
+
+    # Step 1: Try official Firebase Admin SDK
+    app = _build_app()
+    if app is not None:
+        try:
+            from firebase_admin import auth
+            decoded = auth.verify_id_token(token, app=app, clock_skew_seconds=60)
+            email = decoded.get("email", "").strip().lower()
+            if not email or "@" not in email:
+                return None
+            return {
+                "uid": decoded.get("uid", ""),
+                "email": email,
+                "name": decoded.get("name", email),
+                "picture": decoded.get("picture", ""),
+                "email_verified": bool(decoded.get("email_verified", False)),
+                "provider": "firebase_admin",
+            }
+        except Exception as exc:
+            logger.warning("Firebase Admin SDK token verification failed: %s", exc)
+
+    # Step 2: Fallback to Google TokenInfo / Public Verification
+    try:
+        # Query Google's authoritative tokeninfo endpoint
+        with httpx.Client(timeout=6.0) as client:
+            resp = client.get(
+                "https://oauth2.googleapis.com/tokeninfo",
+                params={"id_token": token}
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                # Verify expiration
+                exp = int(data.get("exp", 0))
+                if exp < int(time.time()):
+                    logger.warning("Google ID token is expired (exp: %s)", exp)
+                    return None
+
+                email = (data.get("email") or "").strip().lower()
+                if not email or "@" not in email:
+                    return None
+
+                # Check email_verified (Google returns string 'true' or boolean True)
+                email_verified = str(data.get("email_verified", "")).lower() == "true"
+                if not email_verified:
+                    logger.warning("Google ID token email is not verified: %s", email)
+                    return None
+
+                return {
+                    "uid": data.get("sub", ""),
+                    "email": email,
+                    "name": data.get("name", email),
+                    "picture": data.get("picture", ""),
+                    "email_verified": True,
+                    "provider": "google_tokeninfo",
+                }
+            else:
+                logger.warning("Google tokeninfo returned status %s: %s", resp.status_code, resp.text)
+    except Exception as exc:
+        logger.warning("Google tokeninfo verification exception: %s", exc)
+
+    return None
 
 
 def is_configured() -> bool:

@@ -279,6 +279,23 @@ def get_dashboard_overview(
     }
 
 
+def parse_filter_date(val: Optional[str], is_end: bool = False) -> Optional[datetime]:
+    """Parse ISO or YYYY-MM-DD date filter with full-day coverage for end dates."""
+    if not val:
+        return None
+    try:
+        val = val.strip()
+        if len(val) == 10:
+            d = datetime.fromisoformat(val)
+            if is_end:
+                return datetime(d.year, d.month, d.day, 23, 59, 59, 999999, tzinfo=timezone.utc)
+            return datetime(d.year, d.month, d.day, 0, 0, 0, tzinfo=timezone.utc)
+        dt = datetime.fromisoformat(val)
+        return ensure_utc(dt)
+    except Exception:
+        return None
+
+
 # --- Email Management & Analytics ---
 
 def get_emails_list(
@@ -302,19 +319,13 @@ def get_emails_list(
     if device_filter.strip():
         query = query.filter(Customer.last_device_type == device_filter.strip().lower())
 
-    if start_date:
-        try:
-            s_dt = datetime.fromisoformat(start_date)
-            query = query.filter(Customer.first_seen_at >= s_dt)
-        except Exception:
-            pass
+    s_dt = parse_filter_date(start_date, is_end=False)
+    if s_dt:
+        query = query.filter(Customer.first_seen_at >= s_dt)
 
-    if end_date:
-        try:
-            e_dt = datetime.fromisoformat(end_date)
-            query = query.filter(Customer.first_seen_at <= e_dt)
-        except Exception:
-            pass
+    e_dt = parse_filter_date(end_date, is_end=True)
+    if e_dt:
+        query = query.filter(Customer.first_seen_at <= e_dt)
 
     if sort_by == "oldest":
         query = query.order_by(asc(Customer.created_at))
@@ -533,19 +544,13 @@ def get_feedback_list(
     if status_filter.strip():
         query = query.filter(Feedback.status == status_filter.strip())
 
-    if start_date:
-        try:
-            s_dt = datetime.fromisoformat(start_date)
-            query = query.filter(Feedback.created_at >= s_dt)
-        except Exception:
-            pass
+    s_dt = parse_filter_date(start_date, is_end=False)
+    if s_dt:
+        query = query.filter(Feedback.created_at >= s_dt)
 
-    if end_date:
-        try:
-            e_dt = datetime.fromisoformat(end_date)
-            query = query.filter(Feedback.created_at <= e_dt)
-        except Exception:
-            pass
+    e_dt = parse_filter_date(end_date, is_end=True)
+    if e_dt:
+        query = query.filter(Feedback.created_at <= e_dt)
 
     if sort_order == "oldest":
         query = query.order_by(asc(Feedback.created_at))
@@ -613,3 +618,67 @@ def update_feedback_status(
     db.commit()
     db.refresh(feedback)
     return feedback
+
+
+def unblock_customer(db: Session, customer_id: str) -> Optional[Customer]:
+    """Unblocks a customer, clears block date, resets remaining questions, and extends access."""
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    if not customer:
+        return None
+
+    customer.status = "active"
+    customer.last_activity_at = now_utc()
+
+    periods = db.query(AccessPeriod).filter(AccessPeriod.customer_id == customer_id).all()
+    for p in periods:
+        p.status = "active"
+        p.blocked_until = None
+        p.blocked_at = None
+        p.questions_used = 0
+        p.period_expires_at = now_utc() + timedelta(days=20)
+
+    db.commit()
+    db.refresh(customer)
+    return customer
+
+
+def delete_customer(db: Session, customer_id: str) -> bool:
+    """Delete a customer and all cascaded access, usage, and feedback records."""
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    if not customer:
+        return False
+    db.delete(customer)
+    db.commit()
+    return True
+
+
+def bulk_delete_customers(db: Session, customer_ids: List[str]) -> int:
+    """Bulk delete multiple customers."""
+    customers = db.query(Customer).filter(Customer.id.in_(customer_ids)).all()
+    count = 0
+    for c in customers:
+        db.delete(c)
+        count += 1
+    db.commit()
+    return count
+
+
+def delete_feedback(db: Session, feedback_id: str) -> bool:
+    """Delete a single feedback entry."""
+    fb = db.query(Feedback).filter(Feedback.id == feedback_id).first()
+    if not fb:
+        return False
+    db.delete(fb)
+    db.commit()
+    return True
+
+
+def bulk_delete_feedback(db: Session, feedback_ids: List[str]) -> int:
+    """Bulk delete multiple feedback entries."""
+    fbs = db.query(Feedback).filter(Feedback.id.in_(feedback_ids)).all()
+    count = 0
+    for f in fbs:
+        db.delete(f)
+        count += 1
+    db.commit()
+    return count

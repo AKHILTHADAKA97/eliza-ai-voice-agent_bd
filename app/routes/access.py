@@ -11,6 +11,7 @@ from app.services.access_control import (
     evaluate_access,
     create_session_token,
 )
+from app.services.firebase_admin import verify_id_token
 from app.core.security import general_limiter, get_client_identifier
 
 router = APIRouter(prefix="/api/v1/access", tags=["access"])
@@ -93,23 +94,27 @@ async def google_login(
             headers={"Retry-After": str(retry_after)},
         )
 
-    resolved_email = (body.email or "").strip()
-    if body.credential and not resolved_email:
-        try:
-            import json, base64
-            parts = body.credential.split(".")
-            if len(parts) >= 2:
-                padded = parts[1] + "=" * ((4 - len(parts[1]) % 4) % 4)
-                payload_json = base64.urlsafe_b64decode(padded.encode()).decode("utf-8")
-                claims = json.loads(payload_json)
-                resolved_email = claims.get("email", "").strip()
-        except Exception:
-            pass
+    resolved_email = None
+
+    # Cryptographic token verification
+    if body.credential:
+        verified_claims = verify_id_token(body.credential)
+        if not verified_claims:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Google authentication token could not be cryptographically verified or is expired.",
+            )
+        resolved_email = verified_claims.get("email")
+    elif body.email:
+        # Development / test mode email fallback
+        candidate = body.email.strip().lower()
+        if "@" in candidate and "." in candidate:
+            resolved_email = candidate
 
     if not resolved_email or "@" not in resolved_email:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Valid Google account email is required."
+            detail="A verified Google account email is required."
         )
 
     user_agent = request.headers.get("user-agent", "")

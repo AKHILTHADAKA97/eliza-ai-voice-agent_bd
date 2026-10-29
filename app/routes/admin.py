@@ -10,6 +10,10 @@ from app.schemas import (
     AdminLoginResponse,
     AdminUserOut,
     AdminFeedbackUpdateRequest,
+    BulkDeleteCustomersRequest,
+    BulkDeleteFeedbackRequest,
+    BulkDeleteResponse,
+    AdminCustomerUnblockResponse,
 )
 from app.services.admin_service import (
     authenticate_admin,
@@ -20,6 +24,11 @@ from app.services.admin_service import (
     get_customer_detail,
     get_feedback_list,
     update_feedback_status,
+    unblock_customer,
+    delete_customer,
+    bulk_delete_customers,
+    delete_feedback,
+    bulk_delete_feedback,
 )
 from app.core.security import general_limiter, get_client_identifier
 
@@ -227,5 +236,84 @@ async def update_feedback(
         "status": updated.status,
         "admin_notes": getattr(updated, "admin_notes", ""),
         "message": "Feedback updated successfully."
+    }
+
+
+# --- Customer Management Actions (Unblock & Deletion) ---
+
+@router.post("/customers/{customer_id}/unblock", response_model=AdminCustomerUnblockResponse)
+async def unblock_customer_endpoint(
+    customer_id: str,
+    admin: Admin = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """Admin access: immediately unblock a customer and restore their 3 questions access."""
+    customer = unblock_customer(db, customer_id)
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found.")
+    return {
+        "success": True,
+        "message": f"Successfully unblocked {customer.normalized_email}. Trial balance restored.",
+        "customer_id": customer.id,
+        "access_status": "eligible",
+        "remaining_questions": 3
+    }
+
+
+@router.delete("/customers/{customer_id}")
+async def delete_customer_endpoint(
+    customer_id: str,
+    admin: Admin = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """Admin access: permanently delete a customer and all their access and usage records."""
+    success = delete_customer(db, customer_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Customer not found.")
+    return {"success": True, "message": "Customer record deleted successfully."}
+
+
+@router.post("/customers/bulk-delete", response_model=BulkDeleteResponse)
+async def bulk_delete_customers_endpoint(
+    body: BulkDeleteCustomersRequest,
+    admin: Admin = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """Admin access: bulk delete selected customer records."""
+    count = bulk_delete_customers(db, body.customer_ids)
+    return {
+        "success": True,
+        "deleted_count": count,
+        "message": f"Successfully deleted {count} customer record(s)."
+    }
+
+
+# --- Feedback Management Actions (Deletion) ---
+
+@router.delete("/feedback/{feedback_id}")
+async def delete_feedback_endpoint(
+    feedback_id: str,
+    admin: Admin = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """Admin access: permanently delete a single feedback review."""
+    success = delete_feedback(db, feedback_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Feedback entry not found.")
+    return {"success": True, "message": "Feedback review deleted successfully."}
+
+
+@router.post("/feedback/bulk-delete", response_model=BulkDeleteResponse)
+async def bulk_delete_feedback_endpoint(
+    body: BulkDeleteFeedbackRequest,
+    admin: Admin = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """Admin access: bulk delete selected feedback reviews."""
+    count = bulk_delete_feedback(db, body.feedback_ids)
+    return {
+        "success": True,
+        "deleted_count": count,
+        "message": f"Successfully deleted {count} feedback review(s)."
     }
 
