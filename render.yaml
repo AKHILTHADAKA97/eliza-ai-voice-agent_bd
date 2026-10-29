@@ -4,6 +4,36 @@
     runtime: docker
     dockerfilePath: ./Dockerfile
     dockerContext: .
+    region: oregon
+    plan: starter
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.0
+      - key: ENVIRONMENT
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: 8000
+      - key: FRONTEND_ORIGIN
+        value: https://elizaaivoice.vercel.app
+      - key: DEFAULT_PROVIDER
+        value: freemodel
+      - key: REQUEST_TIMEOUT_SECONDS
+        value: 180
+      - key: FREEMODEL_API_KEY
+        value: fm_a9f05128ef4c7a1bd11635054889a67c364b4fd2e193696c
+      - key: FREEMODEL_BASE_URL
+        value: https://freemodel.in/v1
+      - key: FREEMODEL_MODEL
+        value: gemini-3.7-flash
+      - key: ELEVENLABS_API_KEY
+        value: sk_319ccba23196a49b0cbb6bc2dc68202e4d3f7702604f9d6a
+      - key: ELEVENLABS_MODEL_ID
+        value: eleven_multilingual_v2
+      - key: OLLAMA_BASE_URL
+        value: http://localhost:11434
+      - key: OLLAMA_MODEL
+        value: llama3.2:1b
+      - key: SESSION_SECRET_KEY
+        value: eliza-ai-production-secret-2026

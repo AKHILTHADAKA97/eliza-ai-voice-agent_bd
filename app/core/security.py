@@ -79,7 +79,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "script-src 'self'; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "font-src 'self' data: https://fonts.gstatic.com; "
-            "connect-src 'self' http://127.0.0.1:* http://localhost:* ws:; "
+            "connect-src 'self' http://127.0.0.1:* http://localhost:* "
+            "https://eliza-ai-voice-agent-bd.onrender.com "
+            "https://elizaaivoice.vercel.app "
+            "ws: wss:; "
             "img-src 'self' data:; "
             "frame-ancestors 'none';"
         )

@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     environment: str = "Production"
     host: str = "0.0.0.0"
     port: int = 8000
-    frontend_origin: str = "https://elizaai-five.vercel.app/"
+    frontend_origin: str = "https://elizaaivoice.vercel.app"
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
     openai_base_url: str = ""
@@ -57,13 +57,13 @@ class Settings(BaseSettings):
 
     @property
     def configured_origin(self) -> str:
-        return self.frontend_origin.rstrip("/") 
+        return self.frontend_origin.rstrip("/")
 
     @property
     def configured_origins(self):
         origins = [self.frontend_origin.rstrip("/")]
         additional = [
-            "https://elizaai-five.vercel.app",
+            "https://elizaaivoice.vercel.app",
             "http://localhost:5173",
             "http://127.0.0.1:5173",
             "http://localhost:5174",
