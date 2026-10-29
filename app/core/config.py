@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     session_secret_key: str = ""
     rate_limit_per_minute: int = 60
     max_request_size_bytes: int = 1048576
+    cors_origin_regex: str = r"^https:\/\/(.*\.)?(vercel\.app|onrender\.com)(:\d+)?$"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

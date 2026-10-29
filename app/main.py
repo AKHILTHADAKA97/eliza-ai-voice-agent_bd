@@ -39,12 +39,14 @@ app.add_middleware(CorrelationIdMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestSizeLimitMiddleware, max_size_bytes=1048576) # 1MB limit
 app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.configured_origins,
-        allow_credentials=True,
-        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["*"],
-    )
+    CORSMiddleware,
+    allow_origins=settings.configured_origins,
+    allow_origin_regex=settings.cors_origin_regex,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+)
 
 router = ModelRouter()
 
