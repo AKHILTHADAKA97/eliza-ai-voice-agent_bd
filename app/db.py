@@ -4,13 +4,27 @@ Uses SQLAlchemy with SQLite by default. To switch to PostgreSQL, set
 DATABASE_URL=postgresql+psycopg2://user:pass@host:5432/dbname
 """
 import os
+from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
+# Ensure SQLite directory exists regardless of current working directory
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+DEFAULT_DATA_DIR = BACKEND_DIR / "data"
+DEFAULT_DATA_DIR.mkdir(parents=True, exist_ok=True)
+DEFAULT_DB_FILE = (DEFAULT_DATA_DIR / "eliza_access.db").as_posix()
+
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "sqlite:///./data/eliza_access.db",
+    f"sqlite:///{DEFAULT_DB_FILE}",
 )
+
+# Also ensure any custom sqlite file directory is created
+if DATABASE_URL.startswith("sqlite:///"):
+    sqlite_path = DATABASE_URL.replace("sqlite:///", "")
+    if sqlite_path and sqlite_path != ":memory:":
+        Path(sqlite_path).parent.mkdir(parents=True, exist_ok=True)
+
 
 connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 
