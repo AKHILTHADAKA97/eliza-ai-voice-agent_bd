@@ -1,4 +1,4 @@
-﻿services:
+services:
   - type: web
     name: eliza-ai-backend
     runtime: docker
@@ -37,3 +37,7 @@
         value: llama3.2:1b
       - key: SESSION_SECRET_KEY
         value: eliza-ai-production-secret-2026
+      - key: ADMIN_USERNAME
+        value: admin
+      - key: ADMIN_PASSWORD
+        value: ElizaAdmin2026!

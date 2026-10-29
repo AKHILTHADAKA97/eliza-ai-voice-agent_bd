@@ -5,5 +5,7 @@ __pycache__/
 env/
 venv/
 .env
-data/conversations.json
+data/
+*.db
+*.sqlite
 .pytest_cache/

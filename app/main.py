@@ -1,8 +1,9 @@
 import json
 import logging
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from fastapi import FastAPI, HTTPException, Request, Depends
+from fastapi import FastAPI, HTTPException, Request, Depends, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from app.core.config import get_settings
@@ -19,6 +20,13 @@ from app.schemas import ChatRequest, ChatResponse, SettingsIn, SettingsOut
 from app.services.model_router import ModelRouter
 from app.services import conversations
 from app.services import prompt_guard
+from app.db import engine, Base, SessionLocal
+import app.models # Register all SQLAlchemy models
+from app.routes import access, questions, feedback, admin
+from app.services.admin_service import seed_default_admin
+
+# Ensure all database tables exist on startup
+Base.metadata.create_all(bind=engine)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -27,11 +35,24 @@ logging.basicConfig(
 logger = logging.getLogger("eliza.security")
 
 settings = get_settings()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Ensure database tables and initial administrator account exist."""
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        seed_default_admin(db)
+    finally:
+        db.close()
+    yield
+
+
 app = FastAPI(
     title=settings.app_name,
     version="1.0.0",
     docs_url="/docs" if settings.environment == "development" else None,
     redoc_url="/redoc" if settings.environment == "development" else None,
+    lifespan=lifespan,
 )
 
 # Multi-layer security middleware pipeline (executed in reverse registration order)
@@ -47,6 +68,19 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["*"],
 )
+
+# Register access control and admin dashboard routes
+app.include_router(access.router)
+app.include_router(questions.router)
+app.include_router(feedback.router)
+app.include_router(admin.router)
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+@app.get("/favicons", include_in_schema=False)
+async def get_favicons():
+    """Favicon endpoint to prevent 404 console errors."""
+    return Response(content=b"", media_type="image/x-icon", status_code=204)
 
 router = ModelRouter()
 
