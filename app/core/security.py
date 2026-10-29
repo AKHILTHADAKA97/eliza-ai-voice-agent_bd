@@ -27,11 +27,27 @@ class InMemoryRateLimiter:
         self.window = 60.0
         self._history = defaultdict(list)
         self._lock = Lock()
+        self._last_cleanup = time.time()
+
+    def _cleanup_stale(self, now: float) -> None:
+        """Prune empty entries and expired timestamps to bound memory usage."""
+        cutoff = now - self.window
+        stale_keys = []
+        for key, timestamps in self._history.items():
+            self._history[key] = [t for t in timestamps if t > cutoff]
+            if not self._history[key]:
+                stale_keys.append(key)
+        for key in stale_keys:
+            del self._history[key]
 
     def is_allowed(self, key: str, max_requests: int | None = None) -> tuple[bool, int]:
         limit = max_requests or self.rpm
         now = time.time()
         with self._lock:
+            # Periodic cleanup to prevent unbounded memory growth
+            if now - self._last_cleanup > 60.0:
+                self._cleanup_stale(now)
+                self._last_cleanup = now
             timestamps = self._history[key]
             # Prune timestamps older than window
             cutoff = now - self.window
@@ -67,6 +83,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "img-src 'self' data:; "
             "frame-ancestors 'none';"
         )
+        # HSTS only over HTTPS in production
+        if request.url.scheme == "https":
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return response
 
 
@@ -76,12 +95,39 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
         self.max_size_bytes = max_size_bytes
 
     async def dispatch(self, request: Request, call_next):
+        # Check Content-Length header first (fast path)
         content_length = request.headers.get("content-length")
-        if content_length and int(content_length) > self.max_size_bytes:
-            return JSONResponse(
-                status_code=413,
-                content={"detail": "Request payload exceeds maximum allowed size (1MB)."},
-            )
+        if content_length:
+            try:
+                if int(content_length) > self.max_size_bytes:
+                    return JSONResponse(
+                        status_code=413,
+                        content={"detail": "Request payload exceeds maximum allowed size (1MB)."},
+                    )
+            except ValueError:
+                return JSONResponse(
+                    status_code=400,
+                    content={"detail": "Invalid Content-Length header."},
+                )
+
+        # For chunked transfer encoding, enforce by reading body up to limit
+        if request.headers.get("transfer-encoding", "").lower() == "chunked":
+            try:
+                body = await request.body()
+                if len(body) > self.max_size_bytes:
+                    return JSONResponse(
+                        status_code=413,
+                        content={"detail": "Request payload exceeds maximum allowed size (1MB)."},
+                    )
+                # Re-inject body so downstream handlers can still read it
+                async def receive():
+                    return {"type": "http.request", "body": body, "more_body": False}
+                request._receive = receive
+            except Exception:
+                return JSONResponse(
+                    status_code=413,
+                    content={"detail": "Unable to read request body."},
+                )
         return await call_next(request)
 
 
@@ -95,9 +141,9 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
 
 
 def get_client_identifier(request: Request) -> str:
-    """Identifies the client using session header or client IP."""
+    """Identifies the client using a validated session header or client IP."""
     session_id = request.headers.get("X-Session-ID")
-    if session_id and len(session_id) <= 128:
+    if session_id and is_valid_uuid(session_id):
         return f"sess:{session_id}"
     client_host = request.client.host if request.client else "unknown"
     return f"ip:{client_host}"

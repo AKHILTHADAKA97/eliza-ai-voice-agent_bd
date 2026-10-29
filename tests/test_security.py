@@ -71,7 +71,7 @@ def test_path_traversal_conversation_id_rejection():
 
 def test_rate_limiting_enforcement():
     """Verify that requests exceeding the sliding rate limit are throttled with HTTP 429."""
-    test_sid = f"rate-test-{uuid.uuid4()}"
+    test_sid = str(uuid.uuid4())
     client_id = f"sess:{test_sid}"
 
     # Exhaust rate limit quota

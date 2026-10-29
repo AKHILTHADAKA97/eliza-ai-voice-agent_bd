@@ -1,8 +1,3 @@
-from openai import AsyncOpenAI
-from app.core.config import get_settings
-from app.providers.base import BaseProvider
-
-
 import time
 import httpx
 from openai import AsyncOpenAI

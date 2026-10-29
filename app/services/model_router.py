@@ -4,6 +4,11 @@ from app.providers.compatible_provider import CompatibleProvider
 from app.providers.ollama_provider import OllamaProvider
 
 
+# Priority order for automatic failover. Cloud API providers first (they have
+# keys configured), local Ollama last as a best-effort offline fallback.
+AUTO_FALLBACK_ORDER = ["freemodel", "groq", "comet", "openai", "openai-compatible", "ollama"]
+
+
 class ModelRouter:
     def __init__(self):
         self.settings = get_settings()
@@ -19,6 +24,12 @@ class ModelRouter:
                 base_url=self.settings.groq_base_url,
                 api_key=self.settings.groq_api_key,
                 default_model=self.settings.groq_model,
+            ),
+            "comet": CompatibleProvider(
+                name="comet",
+                base_url=self.settings.comet_base_url,
+                api_key=self.settings.comet_api_key,
+                default_model=self.settings.comet_model,
             ),
             "openai": OpenAIProvider(),
             "openai-compatible": CompatibleProvider(),
@@ -41,6 +52,9 @@ class ModelRouter:
             elif name == "groq":
                 model = self.settings.groq_model or "llama-3.3-70b-versatile"
                 models = [model, "llama-3.1-8b-instant"] if available else []
+            elif name == "comet":
+                model = self.settings.comet_model or "gpt-4o-mini"
+                models = [model] if available and model else []
             elif name == "openai":
                 model = self.settings.openai_model
                 models = [model] if available and model else []
@@ -61,29 +75,41 @@ class ModelRouter:
             })
         return items
 
+    def _available_catalog(self):
+        return {p["id"]: p for p in self.catalog() if p["available"]}
+
     def choose(self, provider: str, model: str | None, routing_mode: str):
-        catalog = {p["id"]: p for p in self.catalog()}
+        """Resolve (provider, model). Never raises on transient failures — falls back."""
+        available = self._available_catalog()
         if routing_mode == "manual" and provider == "auto":
             raise ValueError("Manual mode requires a specific provider.")
+
         if provider == "auto":
             configured_default = self.settings.default_provider
             order = [configured_default] if configured_default in self.providers else []
-            order += ["ollama", "freemodel", "groq", "openai", "openai-compatible"]
+            order += AUTO_FALLBACK_ORDER
             for candidate in dict.fromkeys(order):
-                if candidate in catalog and catalog[candidate]["available"]:
-                    cand_models = catalog[candidate].get("models", [])
-                    cand_default = catalog[candidate]["default_model"]
+                if candidate in available:
+                    cand_models = available[candidate].get("models", [])
+                    cand_default = available[candidate]["default_model"]
                     if model and (model == cand_default or model in cand_models):
                         return candidate, model
                     return candidate, cand_default
-            raise RuntimeError("No AI provider is configured. Configure FreeModel, Groq, OpenAI, an OpenAI-compatible endpoint, or Ollama.")
+            raise RuntimeError("No AI provider is configured.")
+
         if provider not in self.providers:
             raise ValueError(f"Unsupported provider: {provider}")
-        if not catalog[provider]["available"]:
+        if provider not in available:
+            # Explicit provider unavailable — fall back to next available
+            fallback_order = [self.settings.default_provider] + AUTO_FALLBACK_ORDER
+            for candidate in dict.fromkeys(fallback_order):
+                if candidate in available and candidate != provider:
+                    cand_default = available[candidate]["default_model"]
+                    return candidate, model if model in available[candidate].get("models", []) else cand_default
             raise RuntimeError(f"{provider} is not configured or available. Check backend/.env.")
-        
-        prov_models = catalog[provider].get("models", [])
-        prov_default = catalog[provider]["default_model"]
+
+        prov_models = available[provider].get("models", [])
+        prov_default = available[provider]["default_model"]
         if model:
             if provider == "ollama" and model.lower().startswith("gpt-"):
                 return provider, prov_default
@@ -93,6 +119,28 @@ class ModelRouter:
         return provider, prov_default
 
     async def chat(self, messages, provider: str, model: str | None, routing_mode: str):
-        chosen, selected_model = self.choose(provider, model, routing_mode)
-        answer, actual_model, usage = await self.providers[chosen].chat(messages, selected_model)
-        return answer, chosen, actual_model, usage
+        """Chat with automatic failover on any provider error.
+
+        If the chosen provider raises (timeout, rate limit, auth error, etc.),
+        the router silently retries with the next available provider so the
+        user never sees a broken response.
+        """
+        available = self._available_catalog()
+        configured_default = self.settings.default_provider
+        order = [configured_default] if configured_default in self.providers else []
+        order += AUTO_FALLBACK_ORDER
+
+        last_error = None
+        for candidate in dict.fromkeys(order):
+            if candidate not in available:
+                continue
+            try:
+                prov_models = available[candidate].get("models", [])
+                cand_default = available[candidate]["default_model"]
+                selected_model = model if (model and (model == cand_default or model in prov_models)) else cand_default
+                answer, actual_model, usage = await self.providers[candidate].chat(messages, selected_model)
+                return answer, candidate, actual_model, usage
+            except Exception as exc:
+                last_error = exc
+                continue
+        raise RuntimeError(f"All AI providers failed. Last error: {last_error}")

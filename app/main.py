@@ -39,19 +39,32 @@ app.add_middleware(CorrelationIdMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestSizeLimitMiddleware, max_size_bytes=1048576) # 1MB limit
 app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["https://eliza-ai-voice-agent-frontend.onrender.com", "https://*.onrender.com"] + settings.configured_origins,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
-)
+        CORSMiddleware,
+        allow_origins=settings.configured_origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["*"],
+    )
 
 router = ModelRouter()
 
 
+def _default_model_for(provider: str) -> str:
+    """Maps a provider id to its configured default model."""
+    mapping = {
+        "ollama": settings.ollama_model,
+        "freemodel": settings.freemodel_model,
+        "groq": settings.groq_model,
+        "comet": settings.comet_model,
+        "openai": settings.openai_model,
+        "openai-compatible": settings.openai_compat_model,
+    }
+    return mapping.get(provider, "") or ""
+
+
 _user_settings = {
     "default_provider": settings.default_provider,
-    "default_model": settings.ollama_model if settings.default_provider == "ollama" else settings.openai_model,
+    "default_model": _default_model_for(settings.default_provider),
     "auto_speak": True,
     "voice_name": "",
     "voice_profile": "natural",
@@ -315,11 +328,15 @@ async def get_user_settings(request: Request):
 @app.patch("/api/v1/settings")
 async def update_user_settings(body: SettingsIn, request: Request):
     check_rate_limit(request, is_chat=False)
-    for key, value in body.model_dump(exclude_unset=True).items():
+    patch = body.model_dump(exclude_unset=True)
+    for key, value in patch.items():
         if key == "custom_system_prompt" and value:
             _user_settings[key] = prompt_guard.redact_secrets(value[:4000])
         else:
             _user_settings[key] = value
+    # When the provider changes, sync the default model to the new provider
+    if "default_provider" in patch and "default_model" not in patch:
+        _user_settings["default_model"] = _default_model_for(_user_settings["default_provider"])
     active_prov, active_m = _get_active_provider_and_model()
     resp = dict(_user_settings)
     resp["active_provider"] = active_prov
