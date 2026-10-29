@@ -84,12 +84,12 @@ class EmailVerifyRequest(BaseModel):
 
 
 class GoogleLoginRequest(BaseModel):
-    email: str | None = Field(default=None, max_length=254)
-    credential: str | None = Field(default=None, max_length=4096)
-    name: str | None = Field(default=None, max_length=128)
-    picture: str | None = Field(default=None, max_length=512)
-    device_type: str = Field(default="unknown", max_length=32)
-    browser_name: str = Field(default="unknown", max_length=64)
+    email: str | None = Field(default=None, max_length=512)
+    credential: str | None = Field(default=None, max_length=16384)
+    name: str | None = Field(default=None, max_length=512)
+    picture: str | None = Field(default=None, max_length=4096)
+    device_type: str = Field(default="unknown", max_length=128)
+    browser_name: str = Field(default="unknown", max_length=128)
 
 
 class AccessStatusResponse(BaseModel):

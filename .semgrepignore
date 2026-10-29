@@ -1,0 +1,9 @@
+# Semgrep Ignore Patterns
+.env
+.env.*
+*.env
+*.env.*
+**/dist/**
+**/node_modules/**
+**/.venv/**
+**/data/**
