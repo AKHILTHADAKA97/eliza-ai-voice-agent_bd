@@ -22,7 +22,10 @@ logger = logging.getLogger("eliza.firebase")
 
 _firebase_app = None
 EXPECTED_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "elizaaivoice")
-DEFAULT_FIREBASE_API_KEY = os.getenv("FIREBASE_API_KEY", "AIzaSyCAxS9gkP7rlF15piWD4xHng6cRcfv-YVI")
+# NOTE: FIREBASE_API_KEY is a PUBLIC client-side identifier by design.
+# It is NOT a secret. The backend does not need it for token verification.
+# The actual security comes from backend ID token verification via
+# Firebase Admin SDK or Google's public JWKS endpoint.
 
 
 def _decode_unverified_jwt(token: str) -> Optional[dict]:
@@ -137,7 +140,9 @@ def verify_id_token(token: str) -> Optional[dict]:
             logger.warning("Firebase Admin SDK token verification failed: %s", exc)
 
     # Step 2: Google Identity Toolkit REST Verification (Authoritative Google validation for Firebase Auth tokens)
-    api_key = os.getenv("FIREBASE_API_KEY", DEFAULT_FIREBASE_API_KEY)
+    # NOTE: FIREBASE_API_KEY is a PUBLIC client-side identifier by design.
+    # It is NOT a secret. The backend uses it only for Google's tokeninfo endpoint.
+    api_key = os.getenv("FIREBASE_API_KEY", "")
     if api_key:
         try:
             with httpx.Client(timeout=6.0) as client:

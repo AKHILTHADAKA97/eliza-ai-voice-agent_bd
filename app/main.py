@@ -220,6 +220,17 @@ async def chat(body: ChatRequest, request: Request):
     if not sanitized_message:
         raise HTTPException(status_code=400, detail="Message cannot be empty.")
 
+    # 3. Detect image inputs and return user-friendly error
+    image_indicators = ["image.png", "image.jpg", "image.jpeg", "image.gif", "image.webp",
+                        "![", "data:image", "<img", "img src", "photo", "picture"]
+    message_lower = sanitized_message.lower()
+    for indicator in image_indicators:
+        if indicator in message_lower:
+            raise HTTPException(
+                status_code=400,
+                detail="This model does not support image input. Please send text questions only."
+            )
+
     system_parts = [prompt_guard.CORE_SAFETY_INSTRUCTIONS]
     if body.system_prompt and body.system_prompt.strip():
         system_parts.append(f"INSTRUCTIONS:\n{prompt_guard.redact_secrets(body.system_prompt[:3000])}")
