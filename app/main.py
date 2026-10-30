@@ -27,7 +27,7 @@ from app.services.elevenlabs import (
 )
 from app.db import engine, Base, SessionLocal
 import app.models # Register all SQLAlchemy models
-from app.routes import access, questions, feedback, admin
+from app.routes import access, questions, feedback, admin, auth
 from app.services.admin_service import seed_default_admin
 
 # Ensure all database tables exist on startup
@@ -79,6 +79,7 @@ app.include_router(access.router)
 app.include_router(questions.router)
 app.include_router(feedback.router)
 app.include_router(admin.router)
+app.include_router(auth.router)
 
 
 @app.get("/favicon.ico", include_in_schema=False)
@@ -93,7 +94,6 @@ router = ModelRouter()
 def _default_model_for(provider: str) -> str:
     """Maps a provider id to its configured default model."""
     mapping = {
-        "ollama": settings.ollama_model,
         "freemodel": settings.freemodel_model,
         "groq": settings.groq_model,
         "comet": settings.comet_model,
@@ -138,7 +138,7 @@ def _get_active_provider_and_model() -> tuple[str, str]:
     cat = {p["id"]: p for p in router.catalog()}
     target = _user_settings.get("default_provider", settings.default_provider)
     if target == "auto":
-        candidates = [settings.default_provider, "ollama", "freemodel", "groq", "openai", "openai-compatible"]
+        candidates = [settings.default_provider, "freemodel", "groq", "openai", "openai-compatible", "comet"]
         for cand in dict.fromkeys(candidates):
             if cand in cat and cat[cand]["available"]:
                 return cand, cat[cand]["default_model"]

@@ -46,8 +46,6 @@ class Settings(BaseSettings):
     openai_compat_base_url: str = ""
     openai_compat_api_key: str = ""
     openai_compat_model: str = ""
-    ollama_base_url: str = "http://localhost:11434"
-    ollama_model: str = "llama3.2:1b"
     freemodel_base_url: str = "https://freemodel.in/v1"
     freemodel_api_key: str = ""
     freemodel_model: str = "gemini-3.7-flash"
@@ -62,8 +60,10 @@ class Settings(BaseSettings):
     mongodb_uri: str = ""
     mongodb_database: str = "eliza_ai"
     conversation_file: str = "data/conversations.json"
-    default_provider: str = "auto"
+    default_provider: str = "freemodel"
     request_timeout_seconds: int = 180
+    admin_email: str = "hello.superui@gmail.com"
+    admin_password: str = "Sravanthi@7777"
     session_secret_key: str = ""
     rate_limit_per_minute: int = 60
     max_request_size_bytes: int = 1048576

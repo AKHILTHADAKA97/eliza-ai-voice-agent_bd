@@ -6,7 +6,14 @@ DATABASE_URL=postgresql+psycopg2://user:pass@host:5432/dbname
 import os
 from pathlib import Path
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.orm import sessionmaker
+
+# SQLAlchemy 2.0+ moved declarative_base to sqlalchemy.orm
+# SQLAlchemy 1.x has it in sqlalchemy.ext.declarative
+try:
+    from sqlalchemy.orm import declarative_base
+except ImportError:
+    from sqlalchemy.ext.declarative import declarative_base
 
 # Ensure SQLite directory exists regardless of current working directory
 BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -28,8 +35,8 @@ if DATABASE_URL.startswith("sqlite:///"):
 
 connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 
-engine = create_engine(DATABASE_URL, connect_args=connect_args, future=True)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine, future=True)
+engine = create_engine(DATABASE_URL, connect_args=connect_args)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 

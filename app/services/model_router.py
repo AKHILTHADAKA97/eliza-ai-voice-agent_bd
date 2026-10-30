@@ -1,12 +1,10 @@
 from app.core.config import get_settings
 from app.providers.openai_provider import OpenAIProvider
 from app.providers.compatible_provider import CompatibleProvider
-from app.providers.ollama_provider import OllamaProvider
 
 
-# Priority order for automatic failover. Cloud API providers first (they have
-# keys configured), local Ollama last as a best-effort offline fallback.
-AUTO_FALLBACK_ORDER = ["freemodel", "groq", "comet", "openai", "openai-compatible", "ollama"]
+# Priority order for automatic failover. Cloud API providers first.
+AUTO_FALLBACK_ORDER = ["freemodel", "groq", "comet", "openai", "openai-compatible"]
 
 
 class ModelRouter:
@@ -33,7 +31,6 @@ class ModelRouter:
             ),
             "openai": OpenAIProvider(),
             "openai-compatible": CompatibleProvider(),
-            "ollama": OllamaProvider(),
         }
 
     def catalog(self):
@@ -61,11 +58,6 @@ class ModelRouter:
             elif name == "openai-compatible":
                 model = self.settings.openai_compat_model or ""
                 models = [model] if available and model else []
-            else:
-                installed = provider.get_installed_models() if hasattr(provider, "get_installed_models") else []
-                resolved = provider.resolve_model() if hasattr(provider, "resolve_model") else self.settings.ollama_model
-                model = resolved or self.settings.ollama_model
-                models = installed if installed else ([model] if available and model else [])
             items.append({
                 "id": name,
                 "name": "FreeModel" if name == "freemodel" else ("Groq" if name == "groq" else name.replace("-", " ").title()),
@@ -100,7 +92,6 @@ class ModelRouter:
         if provider not in self.providers:
             raise ValueError(f"Unsupported provider: {provider}")
         if provider not in available:
-            # Explicit provider unavailable — fall back to next available
             fallback_order = [self.settings.default_provider] + AUTO_FALLBACK_ORDER
             for candidate in dict.fromkeys(fallback_order):
                 if candidate in available and candidate != provider:
@@ -111,20 +102,13 @@ class ModelRouter:
         prov_models = available[provider].get("models", [])
         prov_default = available[provider]["default_model"]
         if model:
-            if provider == "ollama" and model.lower().startswith("gpt-"):
-                return provider, prov_default
             if prov_models and model not in prov_models and not any(m.startswith(model) for m in prov_models):
                 return provider, prov_default
             return provider, model
         return provider, prov_default
 
     async def chat(self, messages, provider: str, model: str | None, routing_mode: str):
-        """Chat with automatic failover on any provider error.
-
-        If the chosen provider raises (timeout, rate limit, auth error, etc.),
-        the router silently retries with the next available provider so the
-        user never sees a broken response.
-        """
+        """Chat with automatic failover on any provider error."""
         available = self._available_catalog()
         configured_default = self.settings.default_provider
         order = [configured_default] if configured_default in self.providers else []
