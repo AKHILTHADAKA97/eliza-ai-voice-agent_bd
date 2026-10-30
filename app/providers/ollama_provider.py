@@ -43,9 +43,7 @@ class OllamaProvider(BaseProvider):
         if not self.settings.ollama_base_url:
             return False
         installed = self.get_installed_models()
-        if installed:
-            return True
-        return bool(self.settings.ollama_model)
+        return bool(installed)
 
     def resolve_model(self, model: str | None = None) -> str:
         installed = self.get_installed_models()

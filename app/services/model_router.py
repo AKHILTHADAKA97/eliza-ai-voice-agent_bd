@@ -134,13 +134,23 @@ class ModelRouter:
         for candidate in dict.fromkeys(order):
             if candidate not in available:
                 continue
-            try:
-                prov_models = available[candidate].get("models", [])
-                cand_default = available[candidate]["default_model"]
-                selected_model = model if (model and (model == cand_default or model in prov_models)) else cand_default
-                answer, actual_model, usage = await self.providers[candidate].chat(messages, selected_model)
-                return answer, candidate, actual_model, usage
-            except Exception as exc:
-                last_error = exc
-                continue
+            prov_models = available[candidate].get("models", [])
+            cand_default = available[candidate]["default_model"]
+            selected_model = model if (model and (model == cand_default or model in prov_models)) else cand_default
+
+            candidate_models = [selected_model]
+            if candidate == "freemodel":
+                for fb_m in ["gemini-3.7-flash", "gemini-3.6-flash", "deepseek-v4.1-flash", "mimo-v2.6-flash", "gemma-2-2b", "claude-haiku-5.5"]:
+                    if fb_m not in candidate_models:
+                        candidate_models.append(fb_m)
+
+            for try_model in candidate_models:
+                try:
+                    answer, actual_model, usage = await self.providers[candidate].chat(messages, try_model)
+                    return answer, candidate, actual_model, usage
+                except Exception as exc:
+                    last_error = exc
+                    if candidate != "freemodel":
+                        break
+                    continue
         raise RuntimeError(f"All AI providers failed. Last error: {last_error}")

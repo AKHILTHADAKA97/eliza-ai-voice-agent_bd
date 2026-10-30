@@ -1,11 +1,16 @@
 import os
 import secrets
+from pathlib import Path
 from functools import lru_cache
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Ensure environment variables are loaded directly from .env
-load_dotenv()
+# Ensure environment variables are loaded directly from backend .env regardless of working directory
+_BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+_ENV_FILE = _BACKEND_DIR / ".env"
+if _ENV_FILE.exists():
+    load_dotenv(dotenv_path=_ENV_FILE, override=False)
+load_dotenv(override=False)
 
 
 def _get_port_from_env() -> int:
@@ -64,7 +69,7 @@ class Settings(BaseSettings):
     max_request_size_bytes: int = 1048576
     cors_origin_regex: str = r"^(https:\/\/(.*\.)?(vercel\.app|onrender\.com)|http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+))(:\d+)?$"
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file=str(_ENV_FILE) if _ENV_FILE.exists() else ".env", env_file_encoding="utf-8", extra="ignore")
 
     def __init__(self, **data):
         super().__init__(**data)
